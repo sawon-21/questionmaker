@@ -5,14 +5,28 @@ body {
   font-family: 'Noto Sans Bengali', sans-serif;
   color: #111;
   min-height: 100vh;
+  padding-bottom: 40px;
 }
 
 .container {
   width: 100%;
-  padding-right: 12px;
-  padding-left: 12px;
+  padding-right: 15px;
+  padding-left: 15px;
   margin-right: auto;
   margin-left: auto;
+}
+
+@media (min-width: 576px) {
+  .container { max-width: 540px; }
+}
+@media (min-width: 768px) {
+  .container { max-width: 720px; }
+}
+@media (min-width: 992px) {
+  .container { max-width: 960px; }
+}
+@media (min-width: 1200px) {
+  .container { max-width: 1140px; }
 }
 
 /* Responsive Control Panel */
@@ -32,6 +46,15 @@ body {
   margin-bottom: 1.2rem;
 }
 
+@media (max-width: 768px) {
+  .control-panel {
+    padding: 1rem;
+  }
+  .control-panel h4 {
+    font-size: 1.2rem;
+  }
+}
+
 .input-label {
   font-size: 13px;
   font-weight: 600;
@@ -46,58 +69,94 @@ body {
   border-radius: 10px;
   border: 1.5px solid #e2e8f0;
   transition: all 0.2s;
+  width: 100%;
 }
 
 .form-control:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  outline: none;
 }
 
 .btn {
-  padding: 12px 20px;
+  padding: 10px 20px;
   font-weight: 600;
-  border-radius: 12px;
-  font-size: 15px;
+  border-radius: 10px;
+  font-size: 14px;
   transition: all 0.2s;
-  width: 100%;
-  margin: 4px 0;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.btn-success {
-  background: #059669;
-  border: none;
-}
-
-.btn-danger {
-  background: #dc2626;
-  border: none;
-}
-
-.btn-primary {
-  background: #2563eb;
-  border: none;
-}
-
-.btn-dark {
-  background: #1e293b;
-  border: none;
-}
+.btn-success { background: #059669; color: white; }
+.btn-danger { background: #dc2626; color: white; }
+.btn-primary { background: #2563eb; color: white; }
+.btn-dark { background: #1e293b; color: white; }
+.btn-secondary { background: #64748b; color: white; }
+.btn-outline-secondary { border: 1px solid #64748b; color: #64748b; background: transparent; }
+.btn-outline-primary { border: 1px solid #2563eb; color: #2563eb; background: transparent; }
+.btn-outline-success { border: 1px solid #059669; color: #059669; background: transparent; }
+.btn-outline-danger { border: 1px solid #dc2626; color: #dc2626; background: transparent; }
 
 .btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  opacity: 0.95;
 }
+
+/* Paper Preview - Responsive Scaling */
+#papersContainer {
+  width: 100%;
+  overflow-x: auto;
+  padding: 20px 0;
+  display: flex;
+  justify-content: center;
+  background: #e2e8f0; /* Darker background to verify paper edges */
+  border-radius: 12px;
+}
+
 .paper {
   width: 210mm;
   min-height: 297mm;
-  margin: 0 auto 30px;
   background: white;
   padding: 10mm 9mm;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   border-radius: 6px;
   font-size: 14.5px;
   line-height: 1.48;
+  /* Ensure it doesn't shrink below A4 width on desktop, but scales on mobile */
+  flex-shrink: 0; 
 }
+
+/* Mobile Scaling for Paper */
+@media (max-width: 820px) {
+  #papersContainer {
+    display: block;
+    overflow-x: scroll;
+    padding: 10px;
+    background: #cbd5e1;
+  }
+  
+  .paper {
+    /* On mobile, we might want to scale it down visually or let it scroll */
+    /* Let's scale it down to fit width if user prefers, but scrolling is better for readability */
+    margin: 0 auto;
+    transform-origin: top center;
+  }
+}
+
+/* If screen is very small, scale the paper down to fit */
+@media (max-width: 500px) {
+  .paper {
+    zoom: 0.65; /* Non-standard but effective for quick preview scaling */
+    /* Alternative: transform: scale(0.65); */
+  }
+}
+
 
 .paper-header {
   border: 2px solid #2563eb;
@@ -129,6 +188,12 @@ body {
   widows: 3;
 }
 
+@media (max-width: 600px) {
+  .question-container {
+    column-count: 1; /* Single column on very small screens inside paper if needed, but usually paper format is fixed */
+  }
+}
+
 .question {
   break-inside: avoid;
   page-break-inside: avoid;
@@ -155,6 +220,7 @@ body {
   padding: 1.5rem;
   border-radius: 12px;
   border: 1px solid #e5efff;
+  overflow-x: auto; /* Scroll table on mobile */
 }
 
 .question-bank h5 {
@@ -166,10 +232,18 @@ body {
 .question-table {
   max-height: 400px;
   overflow-y: auto;
+  min-width: 600px; /* Ensure table doesn't squish too much */
 }
 
 .question-table table {
   font-size: 14px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.question-table th, .question-table td {
+  padding: 8px;
+  border: 1px solid #e2e8f0;
 }
 
 .question-table th {
@@ -177,10 +251,11 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
+  text-align: left;
 }
 
 .action-btns .btn {
-  padding: 0.25rem 0.5rem;
+  padding: 4px 8px;
   font-size: 12px;
   margin: 0 2px;
 }
@@ -188,6 +263,23 @@ body {
 /* Modal styles */
 .modal-content {
   font-family: 'Noto Sans Bengali', sans-serif;
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 1rem 1.5rem;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  border-top: 1px solid #e2e8f0;
+  padding: 1rem 1.5rem;
 }
 
 /* Smart Alert */
@@ -196,8 +288,8 @@ body {
   top: 20px;
   right: 20px;
   z-index: 9999;
-  min-width: 320px;
-  max-width: 400px;
+  min-width: 300px;
+  max-width: 90%; /* Responsive width */
   padding: 16px 20px;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0,0,0,0.15);
@@ -206,6 +298,15 @@ body {
   font-family: 'Noto Sans Bengali', sans-serif;
   border-left: 5px solid;
   backdrop-filter: blur(10px);
+}
+
+@media (max-width: 480px) {
+  .smart-alert {
+    top: 10px;
+    right: 10px;
+    left: 10px; /* Full width on mobile */
+    min-width: auto;
+  }
 }
 
 @keyframes slideInRight {
@@ -296,6 +397,11 @@ body {
   flex-wrap: wrap;
 }
 
+.action-button-group .btn {
+  flex: 1;
+  min-width: 140px; /* Ensure buttons don't get too small */
+}
+
 /* PRINT SETTINGS */
 @page {
   size: A4;
@@ -303,8 +409,9 @@ body {
 }
 
 @media print {
-  body { background: white !important; }
-  .control-panel, .question-bank, .smart-alert, .modal { display: none !important; }
+  body { background: white !important; padding: 0 !important; }
+  .control-panel, .question-bank, .smart-alert, .modal, .modal-backdrop { display: none !important; }
+  #papersContainer { background: white !important; padding: 0 !important; display: block !important; overflow: visible !important; }
 
   .paper {
     box-shadow: none !important;
@@ -314,6 +421,7 @@ body {
     border-radius: 0 !important;
     font-size: 13.8px !important;
     line-height: 1.38 !important;
+    zoom: 1 !important; /* Reset zoom for print */
   }
 
   .paper-header {
@@ -341,6 +449,7 @@ body {
 
   .question-container {
     column-gap: 24px !important;
+    column-count: 2 !important; /* Force 2 columns on print */
   }
 
   .question {
