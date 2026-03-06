@@ -719,8 +719,8 @@ export default function App() {
           <div className="row mb-2">
             <div className="col-8">
               <div className="paper-header text-center">
-                <h4>নাজির উদ্দীন মডেল কোচিং সেন্টার</h4>
-                <small>ডাংগী, বালিয়াডাংগী, ঠাকুরগাঁও</small>
+                <h4>গুডলাক এডুকেয়ার</h4>
+                <small> বালিয়াডাংগী, ঠাকুরগাঁও</small>
                 <div id="showExam" className="fw-bold" style={{ fontSize: '1.15rem' }}>{formData.examName}</div>
                 <div className="mt-1">
                   শ্রেণী: <b id="showClass">{formData.className}</b> &nbsp;|&nbsp;
