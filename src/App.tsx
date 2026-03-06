@@ -575,7 +575,7 @@ export default function App() {
             <div className="mb-2">
                 <textarea 
                     className="form-control" 
-                    rows={2} 
+                    rows={6} 
                     placeholder="এখানে অগোছালো প্রশ্ন পেস্ট করুন (যেমন: 'বাংলাদেশের রাজধানী কি? ক. ঢাকা খ. চট্টগ্রাম...') এবং AI বাটনে ক্লিক করুন।"
                     value={rawInput}
                     onChange={(e) => setRawInput(e.target.value)}
