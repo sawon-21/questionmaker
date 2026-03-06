@@ -575,7 +575,7 @@ export default function App() {
             <div className="mb-2">
                 <textarea 
                     className="form-control" 
-                    rows={6} 
+                    rows={7} 
                     placeholder="এখানে অগোছালো প্রশ্ন পেস্ট করুন (যেমন: 'বাংলাদেশের রাজধানী কি? ক. ঢাকা খ. চট্টগ্রাম...') এবং AI বাটনে ক্লিক করুন।"
                     value={rawInput}
                     onChange={(e) => setRawInput(e.target.value)}
@@ -596,7 +596,7 @@ export default function App() {
 
         <h6 className="mb-2">প্রশ্ন যোগ করুন / সম্পাদনা করুন</h6>
 
-        <textarea id="qtext" className="form-control mb-2" rows={2} placeholder="প্রশ্ন লিখুন..." value={newQuestion.q} onChange={handleNewQuestionChange}></textarea>
+        <textarea id="qtext" className="form-control mb-2" rows={4} placeholder="প্রশ্ন লিখুন..." value={newQuestion.q} onChange={handleNewQuestionChange}></textarea>
 
         <div className="row g-2">
           <div className="col-md-6">
