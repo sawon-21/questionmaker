@@ -21,8 +21,24 @@ interface AlertState {
   type: 'success' | 'error' | 'warning' | 'info';
 }
 
+interface SavedPaper {
+  id: string;
+  name: string;
+  formData: {
+    className: string;
+    subjectName: string;
+    examName: string;
+    marks: string;
+    time: string;
+  };
+  questions: Question[];
+  createdAt: number;
+}
+
 const STORAGE_KEY = 'smartQuestionBank';
 const HEADER_STORAGE_KEY = 'smartQuestionHeader';
+const SAVED_PAPERS_KEY = 'smartSavedPapers';
+const API_KEYS_KEY = 'smartApiKeys';
 
 export default function App() {
   // State
@@ -56,6 +72,16 @@ export default function App() {
     };
   });
 
+  const [savedPapers, setSavedPapers] = useState<SavedPaper[]>(() => {
+    const saved = localStorage.getItem(SAVED_PAPERS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [apiKeys, setApiKeys] = useState<string[]>(() => {
+    const saved = localStorage.getItem(API_KEYS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [newQuestion, setNewQuestion] = useState<Question>({ q: '', a: '', b: '', c: '', d: '' });
   const [rawInput, setRawInput] = useState('');
   const [isProcessingAI, setIsProcessingAI] = useState(false);
@@ -65,9 +91,16 @@ export default function App() {
   
   const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null); // Index of question to delete
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  
+  // New Modals
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [paperNameInput, setPaperNameInput] = useState('');
+  const [apiKeyInput, setApiKeyInput] = useState('');
 
-  // Save to LocalStorage
+  // Persistence Effects
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(questions));
   }, [questions]);
@@ -76,12 +109,30 @@ export default function App() {
     localStorage.setItem(HEADER_STORAGE_KEY, JSON.stringify(formData));
   }, [formData]);
 
+  useEffect(() => {
+    localStorage.setItem(SAVED_PAPERS_KEY, JSON.stringify(savedPapers));
+  }, [savedPapers]);
+
+  useEffect(() => {
+    localStorage.setItem(API_KEYS_KEY, JSON.stringify(apiKeys));
+  }, [apiKeys]);
+
   // Alert Helper
   const showAlert = (message: string, type: AlertState['type'] = 'success') => {
     setAlert({ show: true, message, type });
     setTimeout(() => {
       setAlert(prev => ({ ...prev, show: false }));
     }, 3000);
+  };
+
+  // Validation
+  const validateHeader = () => {
+    const { className, subjectName, examName, marks, time } = formData;
+    if (!className || !subjectName || !examName || !marks || !time) {
+      showAlert('অনুগ্রহ করে উপরের সব তথ্য (শ্রেণী, বিষয়, ইত্যাদি) পূরণ করুন।', 'error');
+      return false;
+    }
+    return true;
   };
 
   // Handlers
@@ -92,7 +143,6 @@ export default function App() {
 
   const handleNewQuestionChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target;
-    // Map IDs to keys
     const keyMap: Record<string, keyof Question> = {
       'qtext': 'q',
       'opt1': 'a',
@@ -107,11 +157,13 @@ export default function App() {
   };
 
   const addQuestion = () => {
+    if (!validateHeader()) return;
+
     const { q, a, b, c, d } = newQuestion;
     if (q && a && b && c && d) {
       setQuestions(prev => [...prev, { q, a, b, c, d }]);
       setNewQuestion({ q: '', a: '', b: '', c: '', d: '' });
-      setRawInput(''); // Clear raw input as well if it was used
+      setRawInput('');
       showAlert('প্রশ্ন সফলভাবে যোগ হয়েছে!', 'success');
     } else {
       showAlert('সব ঘর পূরণ করুন!', 'error');
@@ -119,17 +171,73 @@ export default function App() {
   };
 
   const createNewQuestionSet = () => {
-    // Custom confirmation UI instead of window.confirm
     if (questions.length > 0) {
-        // We'll use a simple check here, or rely on the user clicking the button which we can make "double click to confirm" style or a modal.
-        // For simplicity and reliability in iframe, let's just clear it but maybe show a toast that says "Cleared".
-        // Or better, let's use a small state to toggle the button text.
-        // But for now, let's just clear it. The user asked for it to "work".
-        setQuestions([]);
-        showAlert('নতুন প্রশ্ন সেট তৈরি করা হয়েছে!', 'info');
-    } else {
-        showAlert('প্রশ্ন ব্যাংক ইতিমধ্যে খালি আছে।', 'info');
+        if (window.confirm("আপনি কি বর্তমান প্রশ্নপত্রটি সেভ করতে চান? 'Cancel' চাপলে সব মুছে যাবে।")) {
+            setShowSaveModal(true);
+            return;
+        }
     }
+    setQuestions([]);
+    setFormData({ className: '', subjectName: '', examName: '', marks: '', time: '' });
+    showAlert('নতুন প্রশ্ন সেট তৈরি করা হয়েছে!', 'info');
+  };
+
+  const savePaper = () => {
+    if (!paperNameInput.trim()) {
+      showAlert('অনুগ্রহ করে প্রশ্নপত্রের একটি নাম দিন।', 'warning');
+      return;
+    }
+    
+    const newPaper: SavedPaper = {
+      id: Date.now().toString(),
+      name: paperNameInput,
+      formData,
+      questions,
+      createdAt: Date.now()
+    };
+
+    setSavedPapers(prev => [newPaper, ...prev]);
+    setShowSaveModal(false);
+    setPaperNameInput('');
+    showAlert('প্রশ্নপত্র সফলভাবে সেভ করা হয়েছে!', 'success');
+  };
+
+  const loadPaper = (paper: SavedPaper) => {
+    if (questions.length > 0 && !window.confirm("বর্তমান প্রশ্নপত্রটি মুছে যাবে। আপনি কি নিশ্চিত?")) {
+      return;
+    }
+    setFormData(paper.formData);
+    setQuestions(paper.questions);
+    setShowLoadModal(false);
+    showAlert(`"${paper.name}" লোড করা হয়েছে!`, 'success');
+  };
+
+  const deleteSavedPaper = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm("আপনি কি নিশ্চিতভাবে এই সেভ করা ফাইলটি মুছে ফেলতে চান?")) {
+      setSavedPapers(prev => prev.filter(p => p.id !== id));
+      showAlert('ফাইল মুছে ফেলা হয়েছে।', 'warning');
+    }
+  };
+
+  const addApiKey = () => {
+    if (apiKeyInput.trim()) {
+      setApiKeys(prev => [...prev, apiKeyInput.trim()]);
+      setApiKeyInput('');
+      showAlert('API Key যোগ করা হয়েছে!', 'success');
+    }
+  };
+
+  const removeApiKey = (index: number) => {
+    setApiKeys(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const deleteQuestion = (index: number) => {
+    // Direct delete without confirmation as requested by "fixed delete not working" 
+    // (User previously said delete not working, often due to confirm blocks in iframes)
+    // But user also asked for confirmation on new setup. 
+    // Let's use the custom modal for safety.
+    confirmDelete(index);
   };
 
   const confirmDelete = (index: number) => {
@@ -185,24 +293,33 @@ export default function App() {
   };
 
   const handlePrint = () => {
+    if (!validateHeader()) return;
     window.print();
   };
 
   // AI Integration
   const handleAIParse = async () => {
+    if (!validateHeader()) return;
+
     if (!rawInput.trim()) {
         showAlert('অনুগ্রহ করে টেক্সট বক্সে প্রশ্ন পেস্ট করুন।', 'warning');
         return;
     }
     
-    if (!process.env.GEMINI_API_KEY) {
-        showAlert('API Key not found.', 'error');
+    // API Key Rotation Strategy
+    const allKeys = [process.env.GEMINI_API_KEY, ...apiKeys].filter(Boolean) as string[];
+    
+    if (allKeys.length === 0) {
+        showAlert('কোনো API Key পাওয়া যায়নি। সেটিংসে গিয়ে Key যোগ করুন।', 'error');
         return;
     }
 
+    // Pick a random key to distribute load
+    const randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
+
     setIsProcessingAI(true);
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const ai = new GoogleGenAI({ apiKey: randomKey });
         
         const prompt = `
             Parse the following text into a list of multiple choice question objects.
@@ -230,16 +347,13 @@ export default function App() {
         });
         const responseText = response.text || "";
         
-        // Clean up markdown code blocks if present
         const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         let parsed = JSON.parse(jsonString);
 
-        // Handle single object response just in case the model returns one object instead of an array
         if (!Array.isArray(parsed)) {
             parsed = [parsed];
         }
 
-        // Validate structure of each item
         const validQuestions = parsed.filter((item: any) => item.q && item.a && item.b && item.c && item.d);
 
         if (validQuestions.length > 0) {
@@ -252,7 +366,7 @@ export default function App() {
 
     } catch (error) {
         console.error("AI Parse Error:", error);
-        showAlert('AI প্রসেসিং এ সমস্যা হয়েছে। আবার চেষ্টা করুন।', 'error');
+        showAlert('AI প্রসেসিং এ সমস্যা হয়েছে। অন্য API Key চেষ্টা করুন বা পরে আবার চেষ্টা করুন।', 'error');
     } finally {
         setIsProcessingAI(false);
     }
@@ -300,30 +414,154 @@ export default function App() {
         </>
       )}
 
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <>
+          <div className="modal-backdrop fade show"></div>
+          <div className="modal fade show" style={{ display: 'block' }} tabIndex={-1}>
+            <div className="modal-dialog">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">সেটিংস (API Keys)</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowSettingsModal(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <p className="text-muted small">AI Limit এড়াতে এখানে অতিরিক্ত Gemini API Key যোগ করতে পারেন। সিস্টেম অটোমেটিকলি এগুলো ব্যবহার করবে।</p>
+                  <div className="input-group mb-3">
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      placeholder="Paste API Key here" 
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                    />
+                    <button className="btn btn-primary" onClick={addApiKey}>Add</button>
+                  </div>
+                  <ul className="list-group">
+                    {apiKeys.map((key, index) => (
+                      <li key={index} className="list-group-item d-flex justify-content-between align-items-center">
+                        <span className="text-truncate" style={{maxWidth: '300px'}}>{key.substring(0, 8)}...{key.substring(key.length - 4)}</span>
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeApiKey(index)}>&times;</button>
+                      </li>
+                    ))}
+                    {apiKeys.length === 0 && <li className="list-group-item text-center text-muted">কোনো অতিরিক্ত Key নেই</li>}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Save Paper Modal */}
+      {showSaveModal && (
+        <>
+          <div className="modal-backdrop fade show"></div>
+          <div className="modal fade show" style={{ display: 'block' }} tabIndex={-1}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">প্রশ্নপত্র সেভ করুন</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowSaveModal(false)}></button>
+                </div>
+                <div className="modal-body">
+                  <label className="form-label">প্রশ্নপত্রের নাম</label>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="যেমন: Class 9 Biology Final"
+                    value={paperNameInput}
+                    onChange={(e) => setPaperNameInput(e.target.value)}
+                  />
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-primary" onClick={savePaper}>সেভ করুন</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Load Paper Modal */}
+      {showLoadModal && (
+        <>
+          <div className="modal-backdrop fade show"></div>
+          <div className="modal fade show" style={{ display: 'block' }} tabIndex={-1}>
+            <div className="modal-dialog modal-lg">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">সেভ করা প্রশ্নপত্র</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowLoadModal(false)}></button>
+                </div>
+                <div className="modal-body">
+                  {savedPapers.length === 0 ? (
+                    <p className="text-center text-muted py-4">কোনো সেভ করা প্রশ্নপত্র নেই।</p>
+                  ) : (
+                    <div className="list-group">
+                      {savedPapers.map((paper) => (
+                        <button 
+                          key={paper.id} 
+                          className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                          onClick={() => loadPaper(paper)}
+                        >
+                          <div>
+                            <div className="fw-bold">{paper.name}</div>
+                            <small className="text-muted">
+                              {paper.formData.className} | {paper.formData.subjectName} | {paper.questions.length} প্রশ্ন
+                            </small>
+                          </div>
+                          <span className="btn btn-sm btn-outline-danger" onClick={(e) => deleteSavedPaper(paper.id, e)}>
+                            <i className="bi bi-trash"></i>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Control Panel */}
       <div className="container mt-4 control-panel">
-        <h4 className="mb-3 text-center">স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+            <h4 className="mb-0">স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
+            <div>
+                <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => setShowSettingsModal(true)} title="Settings">
+                    <i className="bi bi-gear"></i>
+                </button>
+                <button className="btn btn-sm btn-outline-primary me-2" onClick={() => setShowSaveModal(true)} title="Save">
+                    <i className="bi bi-save"></i> সেভ
+                </button>
+                <button className="btn btn-sm btn-outline-success" onClick={() => setShowLoadModal(true)} title="Load">
+                    <i className="bi bi-folder2-open"></i> ওপেন
+                </button>
+            </div>
+        </div>
 
         <div className="row g-3">
           <div className="col-md-3">
-            <span className="input-label">শ্রেণী</span>
-            <input id="className" className="form-control" placeholder="যেমন: নবম" value={formData.className} onChange={handleInputChange} />
+            <span className="input-label">শ্রেণী <span className="text-danger">*</span></span>
+            <input id="className" className={`form-control ${!formData.className ? 'border-warning' : ''}`} placeholder="যেমন: নবম" value={formData.className} onChange={handleInputChange} required />
           </div>
           <div className="col-md-3">
-            <span className="input-label">বিষয়</span>
-            <input id="subjectName" className="form-control" placeholder="যেমন: জীববিজ্ঞান" value={formData.subjectName} onChange={handleInputChange} />
+            <span className="input-label">বিষয় <span className="text-danger">*</span></span>
+            <input id="subjectName" className={`form-control ${!formData.subjectName ? 'border-warning' : ''}`} placeholder="যেমন: জীববিজ্ঞান" value={formData.subjectName} onChange={handleInputChange} required />
           </div>
           <div className="col-md-3">
-            <span className="input-label">পরীক্ষার ধরণ</span>
-            <input id="examName" className="form-control" placeholder="যেমন: মডেল টেস্ট" value={formData.examName} onChange={handleInputChange} />
+            <span className="input-label">পরীক্ষার ধরণ <span className="text-danger">*</span></span>
+            <input id="examName" className={`form-control ${!formData.examName ? 'border-warning' : ''}`} placeholder="যেমন: মডেল টেস্ট" value={formData.examName} onChange={handleInputChange} required />
           </div>
           <div className="col-md-3">
-            <span className="input-label">পূর্ণমান</span>
-            <input id="marks" className="form-control" placeholder="যেমন: ২৫" value={formData.marks} onChange={handleInputChange} />
+            <span className="input-label">পূর্ণমান <span className="text-danger">*</span></span>
+            <input id="marks" className={`form-control ${!formData.marks ? 'border-warning' : ''}`} placeholder="যেমন: ২৫" value={formData.marks} onChange={handleInputChange} required />
           </div>
           <div className="col-md-3">
-            <span className="input-label">সময়</span>
-            <input id="time" className="form-control" placeholder="যেমন: ২৫ মিনিট" value={formData.time} onChange={handleInputChange} />
+            <span className="input-label">সময় <span className="text-danger">*</span></span>
+            <input id="time" className={`form-control ${!formData.time ? 'border-warning' : ''}`} placeholder="যেমন: ২৫ মিনিট" value={formData.time} onChange={handleInputChange} required />
           </div>
         </div>
 
@@ -414,7 +652,7 @@ export default function App() {
                     <button className="btn btn-sm btn-primary" onClick={() => openEditModal(index)} title="সম্পাদনা">
                       <i className="bi bi-pencil"></i>
                     </button>
-                    <button className="btn btn-sm btn-danger" onClick={() => confirmDelete(index)} title="মুছুন">
+                    <button className="btn btn-sm btn-danger" onClick={() => deleteQuestion(index)} title="মুছুন">
                       <i className="bi bi-trash"></i>
                     </button>
                   </td>
