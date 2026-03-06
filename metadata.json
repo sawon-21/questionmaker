@@ -1,0 +1,5 @@
+{
+  "name": "Smart Question Paper Generator",
+  "description": "A tool to create, manage, and print exam question papers with a built-in question bank.",
+  "requestFramePermissions": []
+}
