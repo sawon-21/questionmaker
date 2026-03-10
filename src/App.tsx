@@ -99,14 +99,28 @@ export default function App() {
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [paperNameInput, setPaperNameInput] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
+  
+  const [activeTab, setActiveTab] = useState<'create' | 'bank' | 'preview' | 'settings'>('create');
+  const [apiKeyToDelete, setApiKeyToDelete] = useState<number | null>(null);
+  const [lastSavedTime, setLastSavedTime] = useState<string>('');
+  const [showCustomizePanel, setShowCustomizePanel] = useState(false);
+  const [printSettings, setPrintSettings] = useState({
+    fontSize: 14.5,
+    lineSpacing: 1.48,
+    questionGap: 0.9,
+    columnCount: 2,
+    headerSize: 1.4
+  });
 
   // Persistence Effects
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(questions));
+    setLastSavedTime(new Date().toLocaleTimeString('bn-BD'));
   }, [questions]);
 
   useEffect(() => {
     localStorage.setItem(HEADER_STORAGE_KEY, JSON.stringify(formData));
+    setLastSavedTime(new Date().toLocaleTimeString('bn-BD'));
   }, [formData]);
 
   useEffect(() => {
@@ -172,14 +186,22 @@ export default function App() {
 
   const createNewQuestionSet = () => {
     if (questions.length > 0) {
-        if (window.confirm("আপনি কি বর্তমান প্রশ্নপত্রটি সেভ করতে চান? 'Cancel' চাপলে সব মুছে যাবে।")) {
-            setShowSaveModal(true);
-            return;
-        }
+      // Auto-save the current set
+      const autoName = `${formData.className || 'Class'} - ${formData.subjectName || 'Subject'} - ${formData.examName || 'Exam'} (${new Date().toLocaleDateString('bn-BD')})`;
+      const newPaper: SavedPaper = {
+        id: Date.now().toString(),
+        name: autoName,
+        formData: { ...formData },
+        questions: [...questions],
+        createdAt: Date.now()
+      };
+      setSavedPapers(prev => [newPaper, ...prev]);
+      showAlert(`অটো-সেভ করা হয়েছে: ${autoName}`, 'success');
     }
+    
+    // Clear questions but retain formData for the new set
     setQuestions([]);
-    setFormData({ className: '', subjectName: '', examName: '', marks: '', time: '' });
-    showAlert('নতুন প্রশ্ন সেট তৈরি করা হয়েছে!', 'info');
+    showAlert('নতুন প্রশ্ন সেট তৈরি করা হয়েছে! পূর্বের তথ্য রাখা হয়েছে।', 'info');
   };
 
   const savePaper = () => {
@@ -228,8 +250,16 @@ export default function App() {
     }
   };
 
-  const removeApiKey = (index: number) => {
-    setApiKeys(prev => prev.filter((_, i) => i !== index));
+  const confirmDeleteApiKey = (index: number) => {
+    setApiKeyToDelete(index);
+  };
+
+  const executeDeleteApiKey = () => {
+    if (apiKeyToDelete !== null) {
+      setApiKeys(prev => prev.filter((_, i) => i !== apiKeyToDelete));
+      setApiKeyToDelete(null);
+      showAlert('API Key মুছে ফেলা হয়েছে।', 'warning');
+    }
   };
 
   const deleteQuestion = (index: number) => {
@@ -414,6 +444,30 @@ export default function App() {
         </>
       )}
 
+      {/* API Key Delete Confirmation Modal */}
+      {apiKeyToDelete !== null && (
+        <>
+            <div className="modal-backdrop fade show" style={{ zIndex: 1050 }}></div>
+            <div className="modal fade show" style={{ display: 'block', zIndex: 1055 }} tabIndex={-1}>
+                <div className="modal-dialog modal-dialog-centered">
+                    <div className="modal-content border-danger">
+                        <div className="modal-header bg-danger text-white">
+                            <h5 className="modal-title"><i className="bi bi-exclamation-triangle-fill me-2"></i> সতর্কতা</h5>
+                        </div>
+                        <div className="modal-body">
+                            <p className="fw-bold text-danger">আপনি কি নিশ্চিতভাবে এই API Key টি মুছে ফেলতে চান?</p>
+                            <p className="text-muted small">এই অ্যাকশনটি বাতিল করা যাবে না।</p>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setApiKeyToDelete(null)}>বাতিল</button>
+                            <button type="button" className="btn btn-danger" onClick={executeDeleteApiKey}>হ্যাঁ, মুছুন</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+      )}
+
       {/* Settings Modal */}
       {showSettingsModal && (
         <>
@@ -441,7 +495,7 @@ export default function App() {
                     {apiKeys.map((key, index) => (
                       <li key={index} className="list-group-item d-flex justify-content-between align-items-center">
                         <span className="text-truncate" style={{maxWidth: '300px'}}>{key.substring(0, 8)}...{key.substring(key.length - 4)}</span>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => removeApiKey(index)}>&times;</button>
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => confirmDeleteApiKey(index)}>&times;</button>
                       </li>
                     ))}
                     {apiKeys.length === 0 && <li className="list-group-item text-center text-muted">কোনো অতিরিক্ত Key নেই</li>}
@@ -525,19 +579,42 @@ export default function App() {
         </>
       )}
 
+      {/* Navigation Bar */}
+      <nav className="app-nav">
+        <div className="nav-container">
+          <button className={`nav-item ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
+            <i className="bi bi-plus-square"></i>
+            <span>তৈরি করুন</span>
+          </button>
+          <button className={`nav-item ${activeTab === 'bank' ? 'active' : ''}`} onClick={() => setActiveTab('bank')}>
+            <i className="bi bi-bank2"></i>
+            <span>প্রশ্ন ব্যাংক</span>
+            {questions.length > 0 && <span className="badge bg-primary rounded-pill position-absolute top-0 start-50 translate-middle-x mt-1" style={{fontSize: '0.6rem'}}>{questions.length}</span>}
+          </button>
+          <button className={`nav-item ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>
+            <i className="bi bi-file-earmark-text"></i>
+            <span>প্রিভিউ</span>
+          </button>
+          <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+            <i className="bi bi-gear"></i>
+            <span>সেটিংস</span>
+          </button>
+        </div>
+      </nav>
+
+      <div className="main-content">
+      {/* Create Section */}
+      <div className={`section-container ${activeTab === 'create' ? 'active' : ''}`}>
       {/* Control Panel */}
       <div className="container mt-4 control-panel">
         <div className="d-flex justify-content-between align-items-center mb-3">
-            <h4 className="mb-0">স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
             <div>
-                <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => setShowSettingsModal(true)} title="Settings">
-                    <i className="bi bi-gear"></i>
-                </button>
-                <button className="btn btn-sm btn-outline-primary me-2" onClick={() => setShowSaveModal(true)} title="Save">
+              <h4 className="mb-0">স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
+              {lastSavedTime && <small className="text-success" style={{fontSize: '0.75rem'}}><i className="bi bi-cloud-check"></i> অটো-ড্রাফট: {lastSavedTime}</small>}
+            </div>
+            <div>
+                <button className="btn btn-sm btn-outline-primary" onClick={() => setShowSaveModal(true)} title="Save">
                     <i className="bi bi-save"></i> সেভ
-                </button>
-                <button className="btn btn-sm btn-outline-success" onClick={() => setShowLoadModal(true)} title="Load">
-                    <i className="bi bi-folder2-open"></i> ওপেন
                 </button>
             </div>
         </div>
@@ -575,7 +652,7 @@ export default function App() {
             <div className="mb-2">
                 <textarea 
                     className="form-control" 
-                    rows={7} 
+                    rows={2} 
                     placeholder="এখানে অগোছালো প্রশ্ন পেস্ট করুন (যেমন: 'বাংলাদেশের রাজধানী কি? ক. ঢাকা খ. চট্টগ্রাম...') এবং AI বাটনে ক্লিক করুন।"
                     value={rawInput}
                     onChange={(e) => setRawInput(e.target.value)}
@@ -596,7 +673,7 @@ export default function App() {
 
         <h6 className="mb-2">প্রশ্ন যোগ করুন / সম্পাদনা করুন</h6>
 
-        <textarea id="qtext" className="form-control mb-2" rows={4} placeholder="প্রশ্ন লিখুন..." value={newQuestion.q} onChange={handleNewQuestionChange}></textarea>
+        <textarea id="qtext" className="form-control mb-2" rows={2} placeholder="প্রশ্ন লিখুন..." value={newQuestion.q} onChange={handleNewQuestionChange}></textarea>
 
         <div className="row g-2">
           <div className="col-md-6">
@@ -623,8 +700,12 @@ export default function App() {
         </div>
       </div>
 
+      </div>
+
+      {/* Bank Section */}
+      <div className={`section-container ${activeTab === 'bank' ? 'active' : ''}`}>
       {/* Question Bank Section */}
-      <div className="container question-bank">
+      <div className="container question-bank mt-4">
         <h5><i className="bi bi-bank2"></i> প্রশ্ন ব্যাংক (মোট প্রশ্ন: <span id="totalQuestions">{questions.length}</span>)</h5>
         <div className="question-table">
           <table className="table table-bordered table-hover">
@@ -661,11 +742,7 @@ export default function App() {
             </tbody>
           </table>
         </div>
-        <hr />
-        <div className="action-button-group">
-          <button className="btn btn-primary px-3" onClick={() => showAlert('প্রশ্নপত্র আপডেট করা হয়েছে!', 'success')}><i className="bi bi-file-text"></i> প্রশ্নপত্র আপডেট করুন</button>
-          <button className="btn btn-dark px-3" onClick={handlePrint}><i className="bi bi-printer"></i> প্রিন্ট / PDF</button>
-        </div>
+      </div>
       </div>
 
       {/* Edit Modal */}
@@ -713,15 +790,55 @@ export default function App() {
         </>
       )}
 
+      {/* Preview Section */}
+      <div className={`section-container ${activeTab === 'preview' ? 'active' : ''}`}>
+      <div className="container mt-4 mb-2 text-center d-flex justify-content-center gap-2 flex-wrap">
+          <button className="btn btn-primary px-4" onClick={() => setActiveTab('create')}><i className="bi bi-pencil"></i> এডিট করুন</button>
+          <button className="btn btn-outline-secondary px-4" onClick={() => setShowCustomizePanel(!showCustomizePanel)}><i className="bi bi-sliders"></i> কাস্টমাইজ</button>
+          <button className="btn btn-dark px-4" onClick={handlePrint}><i className="bi bi-printer"></i> প্রিন্ট / PDF</button>
+      </div>
+      
+      {/* Customize Panel */}
+      {showCustomizePanel && (
+        <div className="container mb-4">
+          <div className="card shadow-sm border-0" style={{ borderRadius: '16px', background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)' }}>
+            <div className="card-body">
+              <h6 className="card-title text-primary mb-3"><i className="bi bi-palette"></i> প্রিন্ট সেটিং কাস্টমাইজ করুন</h6>
+              <div className="row g-3">
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>ফন্ট সাইজ ({printSettings.fontSize}px)</label>
+                  <input type="range" className="form-range" min="10" max="24" step="0.5" value={printSettings.fontSize} onChange={(e) => setPrintSettings({...printSettings, fontSize: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>লাইনের দূরত্ব ({printSettings.lineSpacing})</label>
+                  <input type="range" className="form-range" min="1" max="2.5" step="0.05" value={printSettings.lineSpacing} onChange={(e) => setPrintSettings({...printSettings, lineSpacing: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>প্রশ্নের মাঝে গ্যাপ ({printSettings.questionGap}rem)</label>
+                  <input type="range" className="form-range" min="0.2" max="2" step="0.1" value={printSettings.questionGap} onChange={(e) => setPrintSettings({...printSettings, questionGap: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>কলাম সংখ্যা</label>
+                  <select className="form-select form-select-sm" value={printSettings.columnCount} onChange={(e) => setPrintSettings({...printSettings, columnCount: parseInt(e.target.value)})}>
+                    <option value={1}>১ কলাম</option>
+                    <option value={2}>২ কলাম</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Paper Container */}
       <div id="papersContainer">
-        <div className="paper" id="mainPaper">
+        <div className="paper" id="mainPaper" style={{ fontSize: `${printSettings.fontSize}px`, lineHeight: printSettings.lineSpacing }}>
           <div className="row mb-2">
             <div className="col-8">
               <div className="paper-header text-center">
-                <h4>গুডলাক এডুকেয়ার</h4>
-                <small> বালিয়াডাংগী, ঠাকুরগাঁও</small>
-                <div id="showExam" className="fw-bold" style={{ fontSize: '1.15rem' }}>{formData.examName}</div>
+                <h4 style={{ fontSize: `${printSettings.headerSize}rem` }}>নাজির উদ্দীন মডেল কোচিং সেন্টার</h4>
+                <small>ডাংগী, বালিয়াডাংগী, ঠাকুরগাঁও</small>
+                <div id="showExam" className="fw-bold" style={{ fontSize: '1.15em' }}>{formData.examName}</div>
                 <div className="mt-1">
                   শ্রেণী: <b id="showClass">{formData.className}</b> &nbsp;|&nbsp;
                   বিষয়: <b id="showSubject">{formData.subjectName}</b>
@@ -744,12 +861,12 @@ export default function App() {
 
           <hr style={{ borderTop: '1.5px solid #333', margin: '10px 0' }} />
 
-          <div id="questionArea" className="question-container">
+          <div id="questionArea" className="question-container" style={{ columnCount: printSettings.columnCount }}>
             {questions.length === 0 ? (
                <div className="text-center text-muted">কোনো প্রশ্ন নেই। অনুগ্রহ করে প্রশ্ন যোগ করুন।</div>
             ) : (
               questions.map((item, index) => (
-                <div className="question" key={index}>
+                <div className="question" key={index} style={{ marginBottom: `${printSettings.questionGap}rem` }}>
                   <b>{index + 1}. {item.q}</b>
                   <div className="option">Ⓐ {item.a}</div>
                   <div className="option">Ⓑ {item.b}</div>
@@ -760,6 +877,77 @@ export default function App() {
             )}
           </div>
         </div>
+      </div>
+      </div>
+
+      {/* Settings Section */}
+      <div className={`section-container ${activeTab === 'settings' ? 'active' : ''}`}>
+        <div className="container mt-4">
+          <div className="card shadow-sm border-0 mb-4" style={{ borderRadius: '16px' }}>
+            <div className="card-body">
+              <h5 className="card-title text-primary mb-4"><i className="bi bi-folder2-open"></i> সেভ করা প্রশ্নপত্র (Load)</h5>
+              {savedPapers.length === 0 ? (
+                <div className="text-center text-muted py-4">কোনো সেভ করা প্রশ্নপত্র নেই।</div>
+              ) : (
+                <div className="list-group">
+                  {savedPapers.map(paper => (
+                    <div key={paper.id} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style={{ borderRadius: '10px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                      <div onClick={() => loadPaper(paper)} style={{ cursor: 'pointer', flex: 1 }}>
+                        <h6 className="mb-1 fw-bold">{paper.name}</h6>
+                        <small className="text-muted">
+                          {new Date(paper.createdAt).toLocaleString('bn-BD')} | প্রশ্ন: {paper.questions.length}টি
+                        </small>
+                      </div>
+                      <button className="btn btn-sm btn-outline-danger" onClick={(e) => deleteSavedPaper(paper.id, e)}>
+                        <i className="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
+            <div className="card-body">
+              <h5 className="card-title text-primary mb-4"><i className="bi bi-key"></i> API Key সেটিংস</h5>
+              <div className="input-group mb-4">
+                <input type="password" className="form-control" placeholder="নতুন API Key প্রবেশ করান" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} />
+                <button className="btn btn-primary" onClick={addApiKey}>যোগ করুন</button>
+              </div>
+
+              <h6 className="mb-3">সংরক্ষিত API Keys:</h6>
+              {apiKeys.length === 0 ? (
+                <div className="text-muted small">কোনো API Key সংরক্ষিত নেই।</div>
+              ) : (
+                <ul className="list-group">
+                  {apiKeys.map((key, index) => (
+                    <li key={index} className="list-group-item d-flex justify-content-between align-items-center" style={{ borderRadius: '10px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                      <span className="font-monospace text-muted">
+                        {key.substring(0, 8)}...{key.substring(key.length - 4)}
+                      </span>
+                      {apiKeyToDelete === index ? (
+                        <div className="d-flex gap-2">
+                          <button className="btn btn-sm btn-danger" onClick={executeDeleteApiKey}>হ্যাঁ, মুছুন</button>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setApiKeyToDelete(null)}>না</button>
+                        </div>
+                      ) : (
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => confirmDeleteApiKey(index)}>
+                          <i className="bi bi-trash"></i>
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="alert alert-info mt-4 mb-0" style={{ borderRadius: '12px', fontSize: '13px' }}>
+                <i className="bi bi-info-circle-fill me-2"></i>
+                API Key আপনার ব্রাউজারেই সংরক্ষিত থাকে। এটি অন্য কোথাও পাঠানো হয় না।
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       </div>
     </>
   );
