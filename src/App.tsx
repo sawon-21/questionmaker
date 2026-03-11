@@ -431,31 +431,75 @@ export default function App() {
     try {
         const ai = new GoogleGenAI({ apiKey: randomKey });
         
-        const prompt = `
-            Parse the following text into a list of multiple choice question objects.
-            The text might contain multiple questions. Extract each question and its 4 options.
-            If options are not clearly labeled, infer them or generate plausible ones if the text implies a question.
-            
-            Return ONLY a JSON array of objects with this structure:
-            [
-              {
-                  "q": "The question text",
-                  "a": "Option A",
-                  "b": "Option B",
-                  "c": "Option C",
-                  "d": "Option D"
-              }
-            ]
-            
-            Text to parse:
-            ${rawInput}
-        `;
+        
+ const prompt = `
+You are an advanced academic question generator designed for school and college exams.
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-        });
-        const responseText = response.text || "";
+Your job is to generate high quality multiple choice questions (MCQ) for any class, subject, and topic.
+
+Capabilities:
+- Understand both Bangla and English.
+- Generate questions appropriate for the specified class level.
+- Detect mathematical expressions, formulas, and scientific notation.
+- Create calculation based questions when the topic requires it.
+- Generate conceptual and analytical questions.
+- Create realistic and logical wrong options (distractors).
+- Avoid repeating questions.
+- Maintain variation in question structure.
+
+Supported Question Styles:
+- Conceptual MCQ
+- Numerical / Calculation MCQ
+- Statement based MCQ
+- Assertion style MCQ
+- Application based MCQ
+- Definition based MCQ
+
+Rules:
+1. Generate exactly ${questionCount} questions.
+2. Each question must have exactly 4 options.
+3. Options must be meaningful and relevant.
+4. Wrong options should be plausible.
+5. Questions must match the difficulty of Class ${classLevel}.
+6. Do NOT repeat questions.
+7. Do NOT include explanations.
+8. Do NOT include the correct answer.
+9. Do NOT include markdown formatting.
+10. Output must be valid JSON only.
+
+If the topic contains mathematical expressions:
+- Include equations where appropriate.
+- Use clear mathematical notation.
+- Generate numerical problem type MCQs.
+
+If the topic is theory based:
+- Focus on conceptual understanding.
+
+Language rules:
+- If the topic is written in Bangla, generate Bangla questions.
+- If the topic is written in English, generate English questions.
+
+Return ONLY a JSON array with this exact structure:
+
+[
+  {
+    "q": "Question text",
+    "a": "Option A",
+    "b": "Option B",
+    "c": "Option C",
+    "d": "Option D"
+  }
+]
+
+Input Information:
+
+Class: ${classLevel}
+Subject: ${subject}
+Topic: ${topic}
+Number of Questions: ${questionCount}
+
+Generate the questions now.
+`;
         
         const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         let parsed = JSON.parse(jsonString);
