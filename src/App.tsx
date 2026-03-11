@@ -3,8 +3,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
+import { Toaster, toast } from 'react-hot-toast';
+import { 
+  PlusSquare, 
+  Library, 
+  FileText, 
+  Settings, 
+  Save, 
+  FolderOpen, 
+  Trash2, 
+  Edit3, 
+  Printer, 
+  SlidersHorizontal, 
+  Palette, 
+  Key, 
+  CloudCog, 
+  Info,
+  Sparkles,
+  Plus,
+  AlertTriangle
+} from 'lucide-react';
 
 // Types
 interface Question {
@@ -13,12 +33,6 @@ interface Question {
   b: string;
   c: string;
   d: string;
-}
-
-interface AlertState {
-  show: boolean;
-  message: string;
-  type: 'success' | 'error' | 'warning' | 'info';
 }
 
 interface SavedPaper {
@@ -89,7 +103,6 @@ export default function App() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question>({ q: '', a: '', b: '', c: '', d: '' });
   
-  const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   
@@ -104,6 +117,9 @@ export default function App() {
   const [apiKeyToDelete, setApiKeyToDelete] = useState<number | null>(null);
   const [lastSavedTime, setLastSavedTime] = useState<string>('');
   const [showCustomizePanel, setShowCustomizePanel] = useState(false);
+  const [isNavVisible, setIsNavVisible] = useState(true);
+  const lastScrollY = useRef(0);
+  
   const [printSettings, setPrintSettings] = useState({
     fontSize: 14.5,
     lineSpacing: 1.48,
@@ -111,6 +127,22 @@ export default function App() {
     columnCount: 2,
     headerSize: 1.4
   });
+
+  // Scroll listener for auto-hide navbar
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
+        setIsNavVisible(false);
+      } else {
+        setIsNavVisible(true);
+      }
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Persistence Effects
   useEffect(() => {
@@ -131,19 +163,11 @@ export default function App() {
     localStorage.setItem(API_KEYS_KEY, JSON.stringify(apiKeys));
   }, [apiKeys]);
 
-  // Alert Helper
-  const showAlert = (message: string, type: AlertState['type'] = 'success') => {
-    setAlert({ show: true, message, type });
-    setTimeout(() => {
-      setAlert(prev => ({ ...prev, show: false }));
-    }, 3000);
-  };
-
   // Validation
   const validateHeader = () => {
     const { className, subjectName, examName, marks, time } = formData;
     if (!className || !subjectName || !examName || !marks || !time) {
-      showAlert('অনুগ্রহ করে উপরের সব তথ্য (শ্রেণী, বিষয়, ইত্যাদি) পূরণ করুন।', 'error');
+      toast.error('অনুগ্রহ করে উপরের সব তথ্য (শ্রেণী, বিষয়, ইত্যাদি) পূরণ করুন।');
       return false;
     }
     return true;
@@ -178,9 +202,9 @@ export default function App() {
       setQuestions(prev => [...prev, { q, a, b, c, d }]);
       setNewQuestion({ q: '', a: '', b: '', c: '', d: '' });
       setRawInput('');
-      showAlert('প্রশ্ন সফলভাবে যোগ হয়েছে!', 'success');
+      toast.success('প্রশ্ন সফলভাবে যোগ হয়েছে!');
     } else {
-      showAlert('সব ঘর পূরণ করুন!', 'error');
+      toast.error('সব ঘর পূরণ করুন!');
     }
   };
 
@@ -196,23 +220,29 @@ export default function App() {
         createdAt: Date.now()
       };
       setSavedPapers(prev => [newPaper, ...prev]);
-      showAlert(`অটো-সেভ করা হয়েছে: ${autoName}`, 'success');
+      toast.success(`অটো-সেভ করা হয়েছে: ${autoName}`);
     }
     
     // Clear questions but retain formData for the new set
     setQuestions([]);
-    showAlert('নতুন প্রশ্ন সেট তৈরি করা হয়েছে! পূর্বের তথ্য রাখা হয়েছে।', 'info');
+    toast.success('নতুন প্রশ্ন সেট তৈরি করা হয়েছে! পূর্বের তথ্য রাখা হয়েছে।', { icon: 'ℹ️' });
   };
 
   const savePaper = () => {
     if (!paperNameInput.trim()) {
-      showAlert('অনুগ্রহ করে প্রশ্নপত্রের একটি নাম দিন।', 'warning');
+      toast.error('অনুগ্রহ করে প্রশ্নপত্রের একটি নাম দিন।');
+      return;
+    }
+    
+    const existing = savedPapers.find(p => p.name.toLowerCase() === paperNameInput.trim().toLowerCase());
+    if (existing) {
+      toast.error('এই নামের একটি প্রশ্নপত্র ইতিমধ্যে সেভ করা আছে। দয়া করে অন্য নাম দিন।');
       return;
     }
     
     const newPaper: SavedPaper = {
       id: Date.now().toString(),
-      name: paperNameInput,
+      name: paperNameInput.trim(),
       formData,
       questions,
       createdAt: Date.now()
@@ -221,7 +251,7 @@ export default function App() {
     setSavedPapers(prev => [newPaper, ...prev]);
     setShowSaveModal(false);
     setPaperNameInput('');
-    showAlert('প্রশ্নপত্র সফলভাবে সেভ করা হয়েছে!', 'success');
+    toast.success('প্রশ্নপত্র সফলভাবে সেভ করা হয়েছে!');
   };
 
   const loadPaper = (paper: SavedPaper) => {
@@ -231,14 +261,14 @@ export default function App() {
     setFormData(paper.formData);
     setQuestions(paper.questions);
     setShowLoadModal(false);
-    showAlert(`"${paper.name}" লোড করা হয়েছে!`, 'success');
+    toast.success(`"${paper.name}" লোড করা হয়েছে!`);
   };
 
   const deleteSavedPaper = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm("আপনি কি নিশ্চিতভাবে এই সেভ করা ফাইলটি মুছে ফেলতে চান?")) {
       setSavedPapers(prev => prev.filter(p => p.id !== id));
-      showAlert('ফাইল মুছে ফেলা হয়েছে।', 'warning');
+      toast.success('ফাইল মুছে ফেলা হয়েছে।', { icon: '🗑️' });
     }
   };
 
@@ -246,7 +276,7 @@ export default function App() {
     if (apiKeyInput.trim()) {
       setApiKeys(prev => [...prev, apiKeyInput.trim()]);
       setApiKeyInput('');
-      showAlert('API Key যোগ করা হয়েছে!', 'success');
+      toast.success('API Key যোগ করা হয়েছে!');
     }
   };
 
@@ -258,15 +288,11 @@ export default function App() {
     if (apiKeyToDelete !== null) {
       setApiKeys(prev => prev.filter((_, i) => i !== apiKeyToDelete));
       setApiKeyToDelete(null);
-      showAlert('API Key মুছে ফেলা হয়েছে।', 'warning');
+      toast.success('API Key মুছে ফেলা হয়েছে।', { icon: '🗑️' });
     }
   };
 
   const deleteQuestion = (index: number) => {
-    // Direct delete without confirmation as requested by "fixed delete not working" 
-    // (User previously said delete not working, often due to confirm blocks in iframes)
-    // But user also asked for confirmation on new setup. 
-    // Let's use the custom modal for safety.
     confirmDelete(index);
   };
 
@@ -278,7 +304,7 @@ export default function App() {
     if (showDeleteConfirm !== null) {
         setQuestions(prev => prev.filter((_, i) => i !== showDeleteConfirm));
         setShowDeleteConfirm(null);
-        showAlert('প্রশ্ন সফলভাবে মুছে ফেলা হয়েছে!', 'warning');
+        toast.success('প্রশ্ন সফলভাবে মুছে ফেলা হয়েছে!', { icon: '🗑️' });
     }
   };
 
@@ -315,9 +341,9 @@ export default function App() {
         updatedQuestions[editingIndex] = editingQuestion;
         setQuestions(updatedQuestions);
         setShowEditModal(false);
-        showAlert('প্রশ্ন সফলভাবে আপডেট হয়েছে!', 'success');
+        toast.success('প্রশ্ন সফলভাবে আপডেট হয়েছে!');
       } else {
-        showAlert('সব ঘর পূরণ করুন!', 'error');
+        toast.error('সব ঘর পূরণ করুন!');
       }
     }
   };
@@ -332,7 +358,7 @@ export default function App() {
     if (!validateHeader()) return;
 
     if (!rawInput.trim()) {
-        showAlert('অনুগ্রহ করে টেক্সট বক্সে প্রশ্ন পেস্ট করুন।', 'warning');
+        toast.error('অনুগ্রহ করে টেক্সট বক্সে প্রশ্ন পেস্ট করুন।');
         return;
     }
     
@@ -340,7 +366,7 @@ export default function App() {
     const allKeys = [process.env.GEMINI_API_KEY, ...apiKeys].filter(Boolean) as string[];
     
     if (allKeys.length === 0) {
-        showAlert('কোনো API Key পাওয়া যায়নি। সেটিংসে গিয়ে Key যোগ করুন।', 'error');
+        toast.error('কোনো API Key পাওয়া যায়নি। সেটিংসে গিয়ে Key যোগ করুন।');
         return;
     }
 
@@ -389,14 +415,14 @@ export default function App() {
         if (validQuestions.length > 0) {
             setQuestions(prev => [...prev, ...validQuestions]);
             setRawInput('');
-            showAlert(`${validQuestions.length} টি প্রশ্ন সফলভাবে যোগ করা হয়েছে!`, 'success');
+            toast.success(`${validQuestions.length} টি প্রশ্ন সফলভাবে যোগ করা হয়েছে!`);
         } else {
-            showAlert('কোনো বৈধ প্রশ্ন পাওয়া যায়নি।', 'warning');
+            toast.error('কোনো বৈধ প্রশ্ন পাওয়া যায়নি।');
         }
 
     } catch (error) {
         console.error("AI Parse Error:", error);
-        showAlert('AI প্রসেসিং এ সমস্যা হয়েছে। অন্য API Key চেষ্টা করুন বা পরে আবার চেষ্টা করুন।', 'error');
+        toast.error('AI প্রসেসিং এ সমস্যা হয়েছে। অন্য API Key চেষ্টা করুন বা পরে আবার চেষ্টা করুন।');
     } finally {
         setIsProcessingAI(false);
     }
@@ -404,22 +430,31 @@ export default function App() {
 
   return (
     <>
-      {/* Smart Alert */}
-      {alert.show && (
-        <div className={`smart-alert smart-alert-${alert.type}`} style={{ display: 'block' }}>
-          <div className="alert-content">
-            <span className="alert-icon">
-              {alert.type === 'success' && '✅'}
-              {alert.type === 'error' && '❌'}
-              {alert.type === 'warning' && '⚠️'}
-              {alert.type === 'info' && 'ℹ️'}
-            </span>
-            <span className="alert-message">{alert.message}</span>
-            <span className="alert-close" onClick={() => setAlert(prev => ({ ...prev, show: false }))}>&times;</span>
-          </div>
-          <div className="alert-progress" style={{ animation: 'progress 3s linear forwards' }}></div>
-        </div>
-      )}
+      <Toaster 
+        position="top-center" 
+        toastOptions={{
+          style: {
+            borderRadius: '12px',
+            background: '#333',
+            color: '#fff',
+            fontSize: '14px',
+            padding: '12px 16px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.15)'
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }} 
+      />
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm !== null && (
@@ -452,7 +487,7 @@ export default function App() {
                 <div className="modal-dialog modal-dialog-centered">
                     <div className="modal-content border-danger">
                         <div className="modal-header bg-danger text-white">
-                            <h5 className="modal-title"><i className="bi bi-exclamation-triangle-fill me-2"></i> সতর্কতা</h5>
+                            <h5 className="modal-title"><AlertTriangle size={20} className="me-2 text-warning" /> সতর্কতা</h5>
                         </div>
                         <div className="modal-body">
                             <p className="fw-bold text-danger">আপনি কি নিশ্চিতভাবে এই API Key টি মুছে ফেলতে চান?</p>
@@ -566,7 +601,7 @@ export default function App() {
                             </small>
                           </div>
                           <span className="btn btn-sm btn-outline-danger" onClick={(e) => deleteSavedPaper(paper.id, e)}>
-                            <i className="bi bi-trash"></i>
+                            <Trash2 size={16} />
                           </span>
                         </button>
                       ))}
@@ -580,23 +615,23 @@ export default function App() {
       )}
 
       {/* Navigation Bar */}
-      <nav className="app-nav">
+      <nav className={`app-nav ${!isNavVisible ? 'nav-hidden' : ''}`}>
         <div className="nav-container">
           <button className={`nav-item ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
-            <i className="bi bi-plus-square"></i>
+            <PlusSquare size={20} />
             <span>তৈরি করুন</span>
           </button>
           <button className={`nav-item ${activeTab === 'bank' ? 'active' : ''}`} onClick={() => setActiveTab('bank')}>
-            <i className="bi bi-bank2"></i>
+            <Library size={20} />
             <span>প্রশ্ন ব্যাংক</span>
             {questions.length > 0 && <span className="badge bg-primary rounded-pill position-absolute top-0 start-50 translate-middle-x mt-1" style={{fontSize: '0.6rem'}}>{questions.length}</span>}
           </button>
           <button className={`nav-item ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>
-            <i className="bi bi-file-earmark-text"></i>
+            <FileText size={20} />
             <span>প্রিভিউ</span>
           </button>
           <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-            <i className="bi bi-gear"></i>
+            <Settings size={20} />
             <span>সেটিংস</span>
           </button>
         </div>
@@ -610,11 +645,11 @@ export default function App() {
         <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
               <h4 className="mb-0">স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
-              {lastSavedTime && <small className="text-success" style={{fontSize: '0.75rem'}}><i className="bi bi-cloud-check"></i> অটো-ড্রাফট: {lastSavedTime}</small>}
+              {lastSavedTime && <small className="text-success" style={{fontSize: '0.75rem'}}><CloudCog size={14} className="d-inline mb-1" /> অটো-ড্রাফট: {lastSavedTime}</small>}
             </div>
             <div>
                 <button className="btn btn-sm btn-outline-primary" onClick={() => setShowSaveModal(true)} title="Save">
-                    <i className="bi bi-save"></i> সেভ
+                    <Save size={16} className="me-1" /> সেভ
                 </button>
             </div>
         </div>
@@ -647,7 +682,7 @@ export default function App() {
         {/* AI Smart Paste Section */}
         <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
             <h6 className="mb-2 text-blue-800 flex items-center gap-2">
-                <i className="bi bi-stars"></i> স্মার্ট প্রশ্ন জেনারেটর (AI)
+                <Sparkles size={16} /> স্মার্ট প্রশ্ন জেনারেটর (AI)
             </h6>
             <div className="mb-2">
                 <textarea 
@@ -666,7 +701,7 @@ export default function App() {
                 {isProcessingAI ? (
                     <span><span className="spinner-border spinner-border-sm me-2"></span>প্রসেসিং...</span>
                 ) : (
-                    <span><i className="bi bi-magic"></i> অটো-ফরম্যাট করুন</span>
+                    <span className="d-flex align-items-center gap-2"><Sparkles size={16} /> অটো-ফরম্যাট করুন</span>
                 )}
             </button>
         </div>
@@ -695,8 +730,8 @@ export default function App() {
         </div>
 
         <div className="mt-3 action-button-group">
-          <button className="btn btn-success px-3" onClick={addQuestion}><i className="bi bi-plus-circle"></i> প্রশ্ন যোগ করুন</button>
-          <button className="btn btn-danger px-3" onClick={createNewQuestionSet}><i className="bi bi-file-earmark-plus"></i> নতুন প্রশ্ন সেট</button>
+          <button className="btn btn-success px-3 d-flex align-items-center gap-2" onClick={addQuestion}><Plus size={16} /> প্রশ্ন যোগ করুন</button>
+          <button className="btn btn-danger px-3 d-flex align-items-center gap-2" onClick={createNewQuestionSet}><FileText size={16} /> নতুন প্রশ্ন সেট</button>
         </div>
       </div>
 
@@ -706,7 +741,7 @@ export default function App() {
       <div className={`section-container ${activeTab === 'bank' ? 'active' : ''}`}>
       {/* Question Bank Section */}
       <div className="container question-bank mt-4">
-        <h5><i className="bi bi-bank2"></i> প্রশ্ন ব্যাংক (মোট প্রশ্ন: <span id="totalQuestions">{questions.length}</span>)</h5>
+        <h5 className="d-flex align-items-center gap-2"><Library size={20} /> প্রশ্ন ব্যাংক (মোট প্রশ্ন: <span id="totalQuestions">{questions.length}</span>)</h5>
         <div className="question-table">
           <table className="table table-bordered table-hover">
             <thead>
@@ -731,10 +766,10 @@ export default function App() {
                   <td>{item.d.substring(0, 15)}{item.d.length > 15 ? '...' : ''}</td>
                   <td className="action-btns">
                     <button className="btn btn-sm btn-primary" onClick={() => openEditModal(index)} title="সম্পাদনা">
-                      <i className="bi bi-pencil"></i>
+                      <Edit3 size={16} />
                     </button>
                     <button className="btn btn-sm btn-danger" onClick={() => deleteQuestion(index)} title="মুছুন">
-                      <i className="bi bi-trash"></i>
+                      <Trash2 size={16} />
                     </button>
                   </td>
                 </tr>
@@ -793,9 +828,9 @@ export default function App() {
       {/* Preview Section */}
       <div className={`section-container ${activeTab === 'preview' ? 'active' : ''}`}>
       <div className="container mt-4 mb-2 text-center d-flex justify-content-center gap-2 flex-wrap">
-          <button className="btn btn-primary px-4" onClick={() => setActiveTab('create')}><i className="bi bi-pencil"></i> এডিট করুন</button>
-          <button className="btn btn-outline-secondary px-4" onClick={() => setShowCustomizePanel(!showCustomizePanel)}><i className="bi bi-sliders"></i> কাস্টমাইজ</button>
-          <button className="btn btn-dark px-4" onClick={handlePrint}><i className="bi bi-printer"></i> প্রিন্ট / PDF</button>
+          <button className="btn btn-primary px-4 d-flex align-items-center gap-2" onClick={() => setActiveTab('create')}><Edit3 size={16} /> এডিট করুন</button>
+          <button className="btn btn-outline-secondary px-4 d-flex align-items-center gap-2" onClick={() => setShowCustomizePanel(!showCustomizePanel)}><SlidersHorizontal size={16} /> কাস্টমাইজ</button>
+          <button className="btn btn-dark px-4 d-flex align-items-center gap-2" onClick={handlePrint}><Printer size={16} /> প্রিন্ট / PDF</button>
       </div>
       
       {/* Customize Panel */}
@@ -803,7 +838,7 @@ export default function App() {
         <div className="container mb-4">
           <div className="card shadow-sm border-0" style={{ borderRadius: '16px', background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)' }}>
             <div className="card-body">
-              <h6 className="card-title text-primary mb-3"><i className="bi bi-palette"></i> প্রিন্ট সেটিং কাস্টমাইজ করুন</h6>
+              <h6 className="card-title text-primary mb-3 d-flex align-items-center gap-2"><Palette size={16} /> প্রিন্ট সেটিং কাস্টমাইজ করুন</h6>
               <div className="row g-3">
                 <div className="col-md-3 col-6">
                   <label className="form-label" style={{fontSize: '12px'}}>ফন্ট সাইজ ({printSettings.fontSize}px)</label>
@@ -885,7 +920,7 @@ export default function App() {
         <div className="container mt-4">
           <div className="card shadow-sm border-0 mb-4" style={{ borderRadius: '16px' }}>
             <div className="card-body">
-              <h5 className="card-title text-primary mb-4"><i className="bi bi-folder2-open"></i> সেভ করা প্রশ্নপত্র (Load)</h5>
+              <h5 className="card-title text-primary mb-4 d-flex align-items-center gap-2"><FolderOpen size={20} /> সেভ করা প্রশ্নপত্র (Load)</h5>
               {savedPapers.length === 0 ? (
                 <div className="text-center text-muted py-4">কোনো সেভ করা প্রশ্নপত্র নেই।</div>
               ) : (
@@ -899,7 +934,7 @@ export default function App() {
                         </small>
                       </div>
                       <button className="btn btn-sm btn-outline-danger" onClick={(e) => deleteSavedPaper(paper.id, e)}>
-                        <i className="bi bi-trash"></i>
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   ))}
@@ -910,7 +945,7 @@ export default function App() {
 
           <div className="card shadow-sm border-0" style={{ borderRadius: '16px' }}>
             <div className="card-body">
-              <h5 className="card-title text-primary mb-4"><i className="bi bi-key"></i> API Key সেটিংস</h5>
+              <h5 className="card-title text-primary mb-4 d-flex align-items-center gap-2"><Key size={20} /> API Key সেটিংস</h5>
               <div className="input-group mb-4">
                 <input type="password" className="form-control" placeholder="নতুন API Key প্রবেশ করান" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} />
                 <button className="btn btn-primary" onClick={addApiKey}>যোগ করুন</button>
@@ -933,15 +968,15 @@ export default function App() {
                         </div>
                       ) : (
                         <button className="btn btn-sm btn-outline-danger" onClick={() => confirmDeleteApiKey(index)}>
-                          <i className="bi bi-trash"></i>
+                          <Trash2 size={16} />
                         </button>
                       )}
                     </li>
                   ))}
                 </ul>
               )}
-              <div className="alert alert-info mt-4 mb-0" style={{ borderRadius: '12px', fontSize: '13px' }}>
-                <i className="bi bi-info-circle-fill me-2"></i>
+              <div className="alert alert-info mt-4 mb-0 d-flex align-items-center gap-2" style={{ borderRadius: '12px', fontSize: '13px' }}>
+                <Info size={16} className="flex-shrink-0" />
                 API Key আপনার ব্রাউজারেই সংরক্ষিত থাকে। এটি অন্য কোথাও পাঠানো হয় না।
               </div>
             </div>
