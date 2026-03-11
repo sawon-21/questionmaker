@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Toaster, toast } from 'react-hot-toast';
+import Joyride from 'react-joyride';
 import { 
   PlusSquare, 
   Library, 
@@ -125,12 +126,65 @@ export default function App() {
     lineSpacing: 1.48,
     questionGap: 0.9,
     columnCount: 2,
-    headerSize: 1.4
+    headerSize: 1.4,
+    instituteFontSize: 24,
+    optionGap: 0.1,
+    optionFontSize: 14.5
   });
+
+  // Joyride State
+  const [runTour, setRunTour] = useState(false);
+  const [tourSteps] = useState([
+    {
+      target: '.tour-step-1',
+      content: 'এখানে আপনার পরীক্ষার সাধারণ তথ্য (শ্রেণী, বিষয়, সময় ইত্যাদি) দিন।',
+      disableBeacon: true,
+    },
+    {
+      target: '.tour-step-2',
+      content: 'এখানে অগোছালো প্রশ্ন পেস্ট করে AI এর মাধ্যমে এক ক্লিকে সাজিয়ে নিতে পারেন!',
+    },
+    {
+      target: '.tour-step-3',
+      content: 'ম্যানুয়ালি প্রশ্ন যোগ করতে এখানে টাইপ করুন।',
+    },
+    {
+      target: '.tour-step-4',
+      content: 'আপনার তৈরি করা সব প্রশ্ন এখানে দেখতে পাবেন।',
+    },
+    {
+      target: '.tour-step-5',
+      content: 'প্রশ্নপত্র প্রিন্ট করতে বা কাস্টমাইজ করতে এখানে ক্লিক করুন।',
+    },
+    {
+      target: '.tour-step-6',
+      content: 'AI ফিচার ব্যবহার করতে এখানে আপনার Gemini API Key সেট করুন।',
+    }
+  ]);
+
+  useEffect(() => {
+    const hasSeenTour = localStorage.getItem('hasSeenTour');
+    if (!hasSeenTour) {
+      setRunTour(true);
+    }
+  }, []);
+
+  const handleJoyrideCallback = (data: any) => {
+    const { status } = data;
+    const finishedStatuses: string[] = ['finished', 'skipped'];
+    if (finishedStatuses.includes(status)) {
+      setRunTour(false);
+      localStorage.setItem('hasSeenTour', 'true');
+    }
+  };
 
   // Scroll listener for auto-hide navbar
   useEffect(() => {
     const handleScroll = () => {
+      if (window.innerWidth >= 768) {
+        setIsNavVisible(true);
+        return;
+      }
       const currentScrollY = window.scrollY;
       if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
         setIsNavVisible(false);
@@ -430,6 +484,27 @@ export default function App() {
 
   return (
     <>
+      <Joyride
+        steps={tourSteps}
+        run={runTour}
+        continuous={true}
+        showProgress={true}
+        showSkipButton={true}
+        callback={handleJoyrideCallback}
+        styles={{
+          options: {
+            primaryColor: '#2563eb',
+            zIndex: 10000,
+          }
+        }}
+        locale={{
+          back: 'পেছনে',
+          close: 'বন্ধ',
+          last: 'শেষ',
+          next: 'পরবর্তী',
+          skip: 'এড়িয়ে যান'
+        }}
+      />
       <Toaster 
         position="top-center" 
         toastOptions={{
@@ -621,16 +696,16 @@ export default function App() {
             <PlusSquare size={20} />
             <span>তৈরি করুন</span>
           </button>
-          <button className={`nav-item ${activeTab === 'bank' ? 'active' : ''}`} onClick={() => setActiveTab('bank')}>
+          <button className={`nav-item tour-step-4 ${activeTab === 'bank' ? 'active' : ''}`} onClick={() => setActiveTab('bank')}>
             <Library size={20} />
             <span>প্রশ্ন ব্যাংক</span>
             {questions.length > 0 && <span className="badge bg-primary rounded-pill position-absolute top-0 start-50 translate-middle-x mt-1" style={{fontSize: '0.6rem'}}>{questions.length}</span>}
           </button>
-          <button className={`nav-item ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>
+          <button className={`nav-item tour-step-5 ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>
             <FileText size={20} />
             <span>প্রিভিউ</span>
           </button>
-          <button className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+          <button className={`nav-item tour-step-6 ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
             <Settings size={20} />
             <span>সেটিংস</span>
           </button>
@@ -654,7 +729,7 @@ export default function App() {
             </div>
         </div>
 
-        <div className="row g-3">
+        <div className="row g-3 tour-step-1">
           <div className="col-md-3">
             <span className="input-label">শ্রেণী <span className="text-danger">*</span></span>
             <input id="className" className={`form-control ${!formData.className ? 'border-warning' : ''}`} placeholder="যেমন: নবম" value={formData.className} onChange={handleInputChange} required />
@@ -680,7 +755,7 @@ export default function App() {
         <hr className="my-3" />
 
         {/* AI Smart Paste Section */}
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100 tour-step-2">
             <h6 className="mb-2 text-blue-800 flex items-center gap-2">
                 <Sparkles size={16} /> স্মার্ট প্রশ্ন জেনারেটর (AI)
             </h6>
@@ -706,7 +781,7 @@ export default function App() {
             </button>
         </div>
 
-        <h6 className="mb-2">প্রশ্ন যোগ করুন / সম্পাদনা করুন</h6>
+        <h6 className="mb-2 tour-step-3">প্রশ্ন যোগ করুন / সম্পাদনা করুন</h6>
 
         <textarea id="qtext" className="form-control mb-2" rows={2} placeholder="প্রশ্ন লিখুন..." value={newQuestion.q} onChange={handleNewQuestionChange}></textarea>
 
@@ -841,8 +916,20 @@ export default function App() {
               <h6 className="card-title text-primary mb-3 d-flex align-items-center gap-2"><Palette size={16} /> প্রিন্ট সেটিং কাস্টমাইজ করুন</h6>
               <div className="row g-3">
                 <div className="col-md-3 col-6">
-                  <label className="form-label" style={{fontSize: '12px'}}>ফন্ট সাইজ ({printSettings.fontSize}px)</label>
+                  <label className="form-label" style={{fontSize: '12px'}}>প্রতিষ্ঠানের ফন্ট সাইজ ({printSettings.instituteFontSize}px)</label>
+                  <input type="range" className="form-range" min="16" max="40" step="1" value={printSettings.instituteFontSize} onChange={(e) => setPrintSettings({...printSettings, instituteFontSize: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>হেডার ফন্ট সাইজ ({printSettings.headerSize}rem)</label>
+                  <input type="range" className="form-range" min="0.8" max="2" step="0.1" value={printSettings.headerSize} onChange={(e) => setPrintSettings({...printSettings, headerSize: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>প্রশ্নের ফন্ট সাইজ ({printSettings.fontSize}px)</label>
                   <input type="range" className="form-range" min="10" max="24" step="0.5" value={printSettings.fontSize} onChange={(e) => setPrintSettings({...printSettings, fontSize: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>অপশনের ফন্ট সাইজ ({printSettings.optionFontSize}px)</label>
+                  <input type="range" className="form-range" min="10" max="24" step="0.5" value={printSettings.optionFontSize} onChange={(e) => setPrintSettings({...printSettings, optionFontSize: parseFloat(e.target.value)})} />
                 </div>
                 <div className="col-md-3 col-6">
                   <label className="form-label" style={{fontSize: '12px'}}>লাইনের দূরত্ব ({printSettings.lineSpacing})</label>
@@ -851,6 +938,10 @@ export default function App() {
                 <div className="col-md-3 col-6">
                   <label className="form-label" style={{fontSize: '12px'}}>প্রশ্নের মাঝে গ্যাপ ({printSettings.questionGap}rem)</label>
                   <input type="range" className="form-range" min="0.2" max="2" step="0.1" value={printSettings.questionGap} onChange={(e) => setPrintSettings({...printSettings, questionGap: parseFloat(e.target.value)})} />
+                </div>
+                <div className="col-md-3 col-6">
+                  <label className="form-label" style={{fontSize: '12px'}}>অপশনের মাঝে গ্যাপ ({printSettings.optionGap}rem)</label>
+                  <input type="range" className="form-range" min="0" max="1" step="0.05" value={printSettings.optionGap} onChange={(e) => setPrintSettings({...printSettings, optionGap: parseFloat(e.target.value)})} />
                 </div>
                 <div className="col-md-3 col-6">
                   <label className="form-label" style={{fontSize: '12px'}}>কলাম সংখ্যা</label>
@@ -871,14 +962,14 @@ export default function App() {
           <div className="row mb-2">
             <div className="col-8">
               <div className="paper-header text-center">
-                <h4 style={{ fontSize: `${printSettings.headerSize}rem` }}>নাজির উদ্দীন মডেল কোচিং সেন্টার</h4>
-                <small>ডাংগী, বালিয়াডাংগী, ঠাকুরগাঁও</small>
-                <div id="showExam" className="fw-bold" style={{ fontSize: '1.15em' }}>{formData.examName}</div>
-                <div className="mt-1">
+                <h4 style={{ fontSize: `${printSettings.instituteFontSize}px`, fontFamily: "'Li MAK Sylhet Unicode', 'Noto Sans Bengali', sans-serif" }}>নাজির উদ্দীন মডেল কোচিং সেন্টার</h4>
+                <small style={{ fontSize: `${printSettings.headerSize * 0.7}rem` }}>ডাংগী, বালিয়াডাংগী, ঠাকুরগাঁও</small>
+                <div id="showExam" className="fw-bold mt-1" style={{ fontSize: `${printSettings.headerSize * 0.9}rem` }}>{formData.examName}</div>
+                <div className="mt-1" style={{ fontSize: `${printSettings.headerSize * 0.8}rem` }}>
                   শ্রেণী: <b id="showClass">{formData.className}</b> &nbsp;|&nbsp;
                   বিষয়: <b id="showSubject">{formData.subjectName}</b>
                 </div>
-                <div>
+                <div style={{ fontSize: `${printSettings.headerSize * 0.8}rem` }}>
                   পূর্ণমান: <b id="showMarks">{formData.marks}</b> &nbsp;|&nbsp;
                   সময়: <b id="showTime">{formData.time}</b>
                 </div>
@@ -903,10 +994,10 @@ export default function App() {
               questions.map((item, index) => (
                 <div className="question" key={index} style={{ marginBottom: `${printSettings.questionGap}rem` }}>
                   <b>{index + 1}. {item.q}</b>
-                  <div className="option">Ⓐ {item.a}</div>
-                  <div className="option">Ⓑ {item.b}</div>
-                  <div className="option">Ⓒ {item.c}</div>
-                  <div className="option">Ⓓ {item.d}</div>
+                  <div className="option" style={{ marginBottom: `${printSettings.optionGap}rem`, fontSize: `${printSettings.optionFontSize}px` }}>Ⓐ {item.a}</div>
+                  <div className="option" style={{ marginBottom: `${printSettings.optionGap}rem`, fontSize: `${printSettings.optionFontSize}px` }}>Ⓑ {item.b}</div>
+                  <div className="option" style={{ marginBottom: `${printSettings.optionGap}rem`, fontSize: `${printSettings.optionFontSize}px` }}>Ⓒ {item.c}</div>
+                  <div className="option" style={{ marginBottom: `${printSettings.optionGap}rem`, fontSize: `${printSettings.optionFontSize}px` }}>Ⓓ {item.d}</div>
                 </div>
               ))
             )}
@@ -940,6 +1031,29 @@ export default function App() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="card shadow-sm border-0 mb-4" style={{ borderRadius: '16px' }}>
+            <div className="card-body">
+              <h5 className="card-title text-primary mb-4 d-flex align-items-center gap-2"><Info size={20} /> অ্যাপ সম্পর্কে</h5>
+              <div className="mb-4">
+                <p><strong>স্মার্ট প্রশ্নপত্র জেনারেটর</strong> হলো একটি AI-চালিত টুল যা শিক্ষকদের খুব সহজেই প্রশ্নপত্র তৈরি করতে সাহায্য করে।</p>
+                <ul className="list-unstyled">
+                  <li className="mb-2"><span className="text-primary me-2">✓</span> অগোছালো টেক্সট থেকে এক ক্লিকে সাজানো প্রশ্ন তৈরি।</li>
+                  <li className="mb-2"><span className="text-primary me-2">✓</span> প্রশ্নপত্র সেভ করে রাখা এবং পরবর্তীতে এডিট করা।</li>
+                  <li className="mb-2"><span className="text-primary me-2">✓</span> প্রিন্ট করার আগে ফন্ট সাইজ, গ্যাপ এবং লেআউট কাস্টমাইজ করা।</li>
+                </ul>
+              </div>
+              
+              <h6 className="fw-bold text-dark mt-4 mb-3">কিভাবে Gemini API Key সেট করবেন?</h6>
+              <ol className="small text-muted ps-3">
+                <li className="mb-2">প্রথমে <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a> তে যান।</li>
+                <li className="mb-2">আপনার Google অ্যাকাউন্ট দিয়ে লগইন করুন।</li>
+                <li className="mb-2">"Create API Key" বাটনে ক্লিক করুন।</li>
+                <li className="mb-2">তৈরি হওয়া Key টি কপি করে নিচের বক্সে পেস্ট করুন এবং "যোগ করুন" এ ক্লিক করুন।</li>
+                <li>একাধিক Key যোগ করতে পারেন, যাতে একটির লিমিট শেষ হলে অন্যটি কাজ করে।</li>
+              </ol>
             </div>
           </div>
 
