@@ -24,7 +24,9 @@ import {
   Info,
   Sparkles,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 // Types
@@ -99,7 +101,13 @@ export default function App() {
 
   const [newQuestion, setNewQuestion] = useState<Question>({ q: '', a: '', b: '', c: '', d: '' });
   const [rawInput, setRawInput] = useState('');
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiNotes, setAiNotes] = useState('');
+  const [aiQuestionCount, setAiQuestionCount] = useState(5);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [isAiSectionOpen, setIsAiSectionOpen] = useState(false);
+  const [aiMode, setAiMode] = useState<'topic' | 'text'>('topic');
+  const [aiRawText, setAiRawText] = useState('');
   
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question>({ q: '', a: '', b: '', c: '', d: '' });
@@ -120,6 +128,10 @@ export default function App() {
   const [showCustomizePanel, setShowCustomizePanel] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const lastScrollY = useRef(0);
+  
+  // Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   
   const [printSettings, setPrintSettings] = useState({
     fontSize: 14.5,
@@ -197,6 +209,39 @@ export default function App() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // PWA Install Prompt Logic
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Check every minute if we should show the install prompt
+    const interval = setInterval(() => {
+      if (deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
+        setShowInstallModal(true);
+      }
+    }, 60000);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearInterval(interval);
+    };
+  }, [deferredPrompt]);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+      setShowInstallModal(false);
+    }
+  };
 
   // Persistence Effects
   useEffect(() => {
@@ -411,8 +456,8 @@ export default function App() {
   const handleAIParse = async () => {
     if (!validateHeader()) return;
 
-    if (!rawInput.trim()) {
-        toast.error('অনুগ্রহ করে টেক্সট বক্সে প্রশ্ন পেস্ট করুন।');
+    if (!aiTopic.trim()) {
+        toast.error('অনুগ্রহ করে টপিক লিখুন।');
         return;
     }
     
@@ -431,8 +476,7 @@ export default function App() {
     try {
         const ai = new GoogleGenAI({ apiKey: randomKey });
         
-        
- const prompt = `
+        const prompt = `
 You are an advanced academic question generator designed for school and college exams.
 
 Your job is to generate high quality multiple choice questions (MCQ) for any class, subject, and topic.
@@ -456,11 +500,11 @@ Supported Question Styles:
 - Definition based MCQ
 
 Rules:
-1. Generate exactly ${questionCount} questions.
+1. Generate exactly ${aiQuestionCount} questions.
 2. Each question must have exactly 4 options.
 3. Options must be meaningful and relevant.
 4. Wrong options should be plausible.
-5. Questions must match the difficulty of Class ${classLevel}.
+5. Questions must match the difficulty of Class ${formData.className}.
 6. Do NOT repeat questions.
 7. Do NOT include explanations.
 8. Do NOT include the correct answer.
@@ -493,13 +537,20 @@ Return ONLY a JSON array with this exact structure:
 
 Input Information:
 
-Class: ${classLevel}
-Subject: ${subject}
-Topic: ${topic}
-Number of Questions: ${questionCount}
+Class: ${formData.className}
+Subject: ${formData.subjectName}
+Topic: ${aiTopic}
+Notes/Specific Instructions: ${aiNotes || 'None'}
+Number of Questions: ${aiQuestionCount}
 
 Generate the questions now.
 `;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+        });
+        const responseText = response.text || "";
         
         const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         let parsed = JSON.parse(jsonString);
@@ -512,7 +563,6 @@ Generate the questions now.
 
         if (validQuestions.length > 0) {
             setQuestions(prev => [...prev, ...validQuestions]);
-            setRawInput('');
             toast.success(`${validQuestions.length} টি প্রশ্ন সফলভাবে যোগ করা হয়েছে!`);
         } else {
             toast.error('কোনো বৈধ প্রশ্ন পাওয়া যায়নি।');
@@ -521,6 +571,71 @@ Generate the questions now.
     } catch (error) {
         console.error("AI Parse Error:", error);
         toast.error('AI প্রসেসিং এ সমস্যা হয়েছে। অন্য API Key চেষ্টা করুন বা পরে আবার চেষ্টা করুন।');
+    } finally {
+        setIsProcessingAI(false);
+    }
+  };
+
+  const handleAITextParse = async () => {
+    if (!aiRawText.trim()) {
+        toast.error('অনুগ্রহ করে টেক্সট দিন।');
+        return;
+    }
+    
+    const allKeys = [process.env.GEMINI_API_KEY, ...apiKeys].filter(Boolean) as string[];
+    if (allKeys.length === 0) {
+        toast.error('কোনো API Key পাওয়া যায়নি। সেটিংসে গিয়ে Key যোগ করুন।');
+        return;
+    }
+
+    const randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
+    setIsProcessingAI(true);
+    try {
+        const ai = new GoogleGenAI({ apiKey: randomKey });
+        const prompt = `
+You are an advanced academic question parser.
+I will give you some unstructured text containing questions and options, or just a topic with some notes.
+Extract or generate Multiple Choice Questions (MCQs) from this text.
+
+Rules:
+1. Each question must have exactly 4 options.
+2. Do NOT include the correct answer or explanations.
+3. Output must be valid JSON only.
+4. Return ONLY a JSON array with this exact structure:
+[
+  {
+    "q": "Question text",
+    "a": "Option A",
+    "b": "Option B",
+    "c": "Option C",
+    "d": "Option D"
+  }
+]
+
+Text to parse:
+${aiRawText}
+`;
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+        const responseText = response.text || "";
+        const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        let parsed = JSON.parse(jsonString);
+        if (!Array.isArray(parsed)) parsed = [parsed];
+        const validQuestions = parsed.filter((item: any) => item.q && item.a && item.b && item.c && item.d);
+        
+        if (validQuestions.length > 0) {
+            setQuestions(prev => [...prev, ...validQuestions]);
+            toast.success(`${validQuestions.length} টি প্রশ্ন সফলভাবে যোগ করা হয়েছে!`);
+            setAiRawText('');
+            setIsAiSectionOpen(false);
+        } else {
+            toast.error('কোনো সঠিক প্রশ্ন পাওয়া যায়নি।');
+        }
+    } catch (error) {
+        console.error("AI Parse Error:", error);
+        toast.error('এআই প্রসেসিং এ সমস্যা হয়েছে।');
     } finally {
         setIsProcessingAI(false);
     }
@@ -574,6 +689,34 @@ Generate the questions now.
           },
         }} 
       />
+
+      {/* Install App Modal */}
+      {showInstallModal && (
+        <>
+          <div className="modal-backdrop fade show" style={{ zIndex: 1050 }}></div>
+          <div className="modal fade show" style={{ display: 'block', zIndex: 1055 }} tabIndex={-1}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content" style={{ borderRadius: '20px', border: 'none', overflow: 'hidden' }}>
+                <div className="modal-header text-white" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderBottom: 'none' }}>
+                  <h5 className="modal-title d-flex align-items-center gap-2"><Sparkles size={20} /> অ্যাপটি ইনস্টল করুন</h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowInstallModal(false)}></button>
+                </div>
+                <div className="modal-body text-center p-4">
+                  <div className="mb-3">
+                    <img src="/icons/icon-192x192.png" alt="App Icon" style={{ width: '80px', height: '80px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  </div>
+                  <h5 className="fw-bold mb-2" style={{ color: '#1e293b' }}>স্মার্ট প্রশ্নপত্র জেনারেটর</h5>
+                  <p className="text-muted mb-0">অফলাইনে ব্যবহার করতে এবং দ্রুত অ্যাক্সেস পেতে অ্যাপটি আপনার ডিভাইসে ইনস্টল করুন।</p>
+                </div>
+                <div className="modal-footer" style={{ borderTop: 'none', padding: '0 1.5rem 1.5rem', justifyContent: 'center' }}>
+                  <button type="button" className="btn btn-light px-4" onClick={() => setShowInstallModal(false)} style={{ borderRadius: '12px', fontWeight: 600 }}>পরে</button>
+                  <button type="button" className="btn px-4 text-white" onClick={handleInstallClick} style={{ background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '12px', fontWeight: 600, border: 'none' }}>ইনস্টল করুন</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm !== null && (
@@ -753,6 +896,14 @@ Generate the questions now.
             <Settings size={20} />
             <span>সেটিংস</span>
           </button>
+          {deferredPrompt && (
+            <button className="nav-item text-success" onClick={handleInstallClick}>
+              <div className="d-flex align-items-center justify-content-center" style={{ background: '#10b981', color: 'white', borderRadius: '50%', width: '24px', height: '24px', marginBottom: '2px' }}>
+                <Plus size={16} />
+              </div>
+              <span style={{ color: '#10b981', fontWeight: 'bold' }}>ইনস্টল</span>
+            </button>
+          )}
         </div>
       </nav>
 
@@ -763,12 +914,12 @@ Generate the questions now.
       <div className="container mt-4 control-panel">
         <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <h4 className="mb-0">স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
+              <h4 className="mb-0" style={{ fontWeight: 'bold', color: '#1e293b' }}>স্মার্ট প্রশ্নপত্র তৈরি করুন</h4>
               {lastSavedTime && <small className="text-success" style={{fontSize: '0.75rem'}}><CloudCog size={14} className="d-inline mb-1" /> অটো-ড্রাফট: {lastSavedTime}</small>}
             </div>
             <div>
-                <button className="btn btn-sm btn-outline-primary" onClick={() => setShowSaveModal(true)} title="Save">
-                    <Save size={16} className="me-1" /> সেভ
+                <button className="btn btn-sm btn-danger" onClick={createNewQuestionSet} title="নতুন প্রশ্ন সেট" style={{ borderRadius: '8px', fontWeight: 600 }}>
+                    <FileText size={16} className="me-1" /> নতুন প্রশ্ন সেট
                 </button>
             </div>
         </div>
@@ -798,31 +949,129 @@ Generate the questions now.
 
         <hr className="my-3" />
 
-        {/* AI Smart Paste Section */}
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100 tour-step-2">
-            <h6 className="mb-2 text-blue-800 flex items-center gap-2">
-                <Sparkles size={16} /> স্মার্ট প্রশ্ন জেনারেটর (AI)
-            </h6>
-            <div className="mb-2">
-                <textarea 
-                    className="form-control" 
-                    rows={6} 
-                    placeholder="এখানে অগোছালো প্রশ্ন পেস্ট করুন (যেমন: 'বাংলাদেশের রাজধানী কি? ক. ঢাকা খ. চট্টগ্রাম...') এবং AI বাটনে ক্লিক করুন।"
-                    value={rawInput}
-                    onChange={(e) => setRawInput(e.target.value)}
-                ></textarea>
-            </div>
-            <button 
-                className="btn btn-primary w-auto" 
-                onClick={handleAIParse}
-                disabled={isProcessingAI}
+        {/* AI Smart Generator Section */}
+        <div className="mb-4 rounded-xl border tour-step-2" style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', borderColor: '#bbf7d0', boxShadow: '0 4px 15px rgba(34, 197, 94, 0.1)', overflow: 'hidden' }}>
+            <div 
+                className="p-3 d-flex justify-content-between align-items-center" 
+                onClick={() => setIsAiSectionOpen(!isAiSectionOpen)}
+                style={{ cursor: 'pointer' }}
             >
-                {isProcessingAI ? (
-                    <span><span className="spinner-border spinner-border-sm me-2"></span>প্রসেসিং...</span>
-                ) : (
-                    <span className="d-flex align-items-center gap-2"><Sparkles size={16} /> অটো-ফরম্যাট করুন</span>
-                )}
-            </button>
+                <h5 className="mb-0 flex items-center gap-2" style={{ color: '#166534', fontWeight: 'bold' }}>
+                    <Sparkles size={22} /> এআই প্রশ্ন জেনারেটর (AI)
+                </h5>
+                {isAiSectionOpen ? <ChevronUp size={20} color="#166534" /> : <ChevronDown size={20} color="#166534" />}
+            </div>
+            
+            {isAiSectionOpen && (
+                <div className="p-4 pt-0 border-top" style={{ borderColor: 'rgba(34, 197, 94, 0.2)' }}>
+                    <div className="d-flex gap-2 mb-4 mt-3">
+                        <button 
+                            className={`btn btn-sm ${aiMode === 'topic' ? 'btn-success' : 'btn-outline-success'}`}
+                            onClick={() => setAiMode('topic')}
+                            style={{ borderRadius: '8px', fontWeight: 600 }}
+                        >
+                            টপিক থেকে তৈরি
+                        </button>
+                        <button 
+                            className={`btn btn-sm ${aiMode === 'text' ? 'btn-success' : 'btn-outline-success'}`}
+                            onClick={() => setAiMode('text')}
+                            style={{ borderRadius: '8px', fontWeight: 600 }}
+                        >
+                            অগোছালো টেক্সট থেকে
+                        </button>
+                    </div>
+
+                    {aiMode === 'topic' ? (
+                        <div className="row g-3 mb-4">
+                            <div className="col-md-6">
+                                <label className="form-label fw-bold text-success" style={{ fontSize: '0.85rem' }}>শ্রেণী (Class Level)</label>
+                                <input 
+                                    className="form-control" 
+                                    placeholder="যেমন: Class 9, HSC"
+                                    value={formData.className}
+                                    onChange={handleInputChange}
+                                    id="className"
+                                    style={{ border: '1px solid #86efac' }}
+                                />
+                            </div>
+                            <div className="col-md-6">
+                                <label className="form-label fw-bold text-success" style={{ fontSize: '0.85rem' }}>বিষয় (Subject)</label>
+                                <input 
+                                    className="form-control" 
+                                    placeholder="যেমন: Biology, Physics"
+                                    value={formData.subjectName}
+                                    onChange={handleInputChange}
+                                    id="subjectName"
+                                    style={{ border: '1px solid #86efac' }}
+                                />
+                            </div>
+                            <div className="col-md-8">
+                                <label className="form-label fw-bold text-success" style={{ fontSize: '0.85rem' }}>টপিক (Topic)</label>
+                                <input 
+                                    className="form-control" 
+                                    placeholder="যেমন: 'বাংলাদেশের মুক্তিযুদ্ধ', 'Newtonian Mechanics'"
+                                    value={aiTopic}
+                                    onChange={(e) => setAiTopic(e.target.value)}
+                                    style={{ border: '1px solid #86efac' }}
+                                />
+                            </div>
+                            <div className="col-md-4">
+                                <label className="form-label fw-bold text-success" style={{ fontSize: '0.85rem' }}>প্রশ্নের সংখ্যা</label>
+                                <input 
+                                    type="number"
+                                    className="form-control" 
+                                    placeholder="সংখ্যা (যেমন: 10)"
+                                    min="1"
+                                    max="20"
+                                    value={aiQuestionCount}
+                                    onChange={(e) => setAiQuestionCount(parseInt(e.target.value) || 5)}
+                                    style={{ border: '1px solid #86efac' }}
+                                />
+                            </div>
+                            <div className="col-md-12">
+                                <label className="form-label fw-bold text-success" style={{ fontSize: '0.85rem' }}>বিশেষ নির্দেশনা / নোট (Notes)</label>
+                                <textarea 
+                                    className="form-control" 
+                                    rows={2}
+                                    placeholder="যেমন: 'প্রশ্নগুলো একটু কঠিন হবে', 'শুধুমাত্র গাণিতিক সমস্যা দিন'"
+                                    value={aiNotes}
+                                    onChange={(e) => setAiNotes(e.target.value)}
+                                    style={{ border: '1px solid #86efac' }}
+                                ></textarea>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="row g-3 mb-4">
+                            <div className="col-12">
+                                <label className="form-label fw-bold text-success" style={{ fontSize: '0.85rem' }}>অগোছালো টেক্সট দিন</label>
+                                <textarea 
+                                    className="form-control" 
+                                    rows={6}
+                                    placeholder="এখানে আপনার অগোছালো প্রশ্ন বা টেক্সট পেস্ট করুন। এআই নিজে থেকেই সাজিয়ে এমসিকিউ তৈরি করবে..."
+                                    value={aiRawText}
+                                    onChange={(e) => setAiRawText(e.target.value)}
+                                    style={{ border: '1px solid #86efac' }}
+                                ></textarea>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="d-flex justify-content-end">
+                        <button 
+                            className="btn px-4 py-2 fw-bold" 
+                            style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', border: 'none', borderRadius: '10px', boxShadow: '0 4px 10px rgba(22, 163, 74, 0.3)' }}
+                            onClick={aiMode === 'topic' ? handleAIParse : handleAITextParse}
+                            disabled={isProcessingAI}
+                        >
+                            {isProcessingAI ? (
+                                <span><span className="spinner-border spinner-border-sm me-2"></span>জেনারেট হচ্ছে...</span>
+                            ) : (
+                                <span className="d-flex align-items-center gap-2"><Sparkles size={18} /> প্রশ্ন জেনারেট করুন</span>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
 
         <h6 className="mb-2 tour-step-3">প্রশ্ন যোগ করুন / সম্পাদনা করুন</h6>
@@ -850,7 +1099,7 @@ Generate the questions now.
 
         <div className="mt-3 action-button-group">
           <button className="btn btn-success px-3 d-flex align-items-center gap-2" onClick={addQuestion}><Plus size={16} /> প্রশ্ন যোগ করুন</button>
-          <button className="btn btn-danger px-3 d-flex align-items-center gap-2" onClick={createNewQuestionSet}><FileText size={16} /> নতুন প্রশ্ন সেট</button>
+          <button className="btn btn-outline-primary px-3 d-flex align-items-center gap-2" onClick={() => setShowSaveModal(true)}><Save size={16} /> সেভ করুন</button>
         </div>
       </div>
 
@@ -860,7 +1109,9 @@ Generate the questions now.
       <div className={`section-container ${activeTab === 'bank' ? 'active' : ''}`}>
       {/* Question Bank Section */}
       <div className="container question-bank mt-4">
-        <h5 className="d-flex align-items-center gap-2"><Library size={20} /> প্রশ্ন ব্যাংক (মোট প্রশ্ন: <span id="totalQuestions">{questions.length}</span>)</h5>
+        <h5 className="d-flex align-items-center gap-2 mb-4" style={{ fontWeight: 'bold', color: '#1e293b' }}>
+          <Library size={24} className="text-primary" /> প্রশ্ন ব্যাংক (মোট প্রশ্ন: <span id="totalQuestions">{questions.length}</span>)
+        </h5>
         <div className="question-table">
           <table className="table table-bordered table-hover">
             <thead>
@@ -1139,6 +1390,44 @@ Generate the questions now.
               </div>
             </div>
           </div>
+
+          {/* Developer Info & Visitor Counter */}
+          <div className="text-center mt-5 mb-4">
+            <p className="text-muted mb-2" style={{ fontSize: '14px' }}>
+              Developed by <strong style={{ color: '#1e293b' }}>Mehedi Al Hasan Sawon</strong>
+            </p>
+            <a 
+              href="https://www.facebook.com/mehedialhasansawon" 
+              target="_blank" 
+              rel="noreferrer"
+              className="d-inline-flex align-items-center justify-content-center mb-3"
+              style={{ 
+                width: '36px', 
+                height: '36px', 
+                borderRadius: '50%', 
+                background: '#1877F2', 
+                color: 'white',
+                textDecoration: 'none',
+                boxShadow: '0 4px 10px rgba(24, 119, 242, 0.3)',
+                transition: 'transform 0.2s'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951"/>
+              </svg>
+            </a>
+            
+            <div className="mt-2">
+              <img 
+                src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fquestionmaker.vercel.app&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false" 
+                alt="Visitor Counter" 
+                style={{ height: '20px', opacity: 0.8 }}
+              />
+            </div>
+          </div>
+
         </div>
       </div>
       </div>
